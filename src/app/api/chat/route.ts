@@ -167,8 +167,81 @@ const knowledgeBase = [
   }
 ];
 
+// Source citations for each topic — page references from the official MITC PDF
+const topicSources: Record<string, string> = {
+  "Joining & Annual Fees": "MITC Page 1-5, Section I.1 — Schedule of Fees and Charges",
+  "Finance Charges & Interest Rates": "MITC Page 7, Section I.2 — Finance Charges",
+  "Late Payment Charges": "MITC Page 18-22, Section I.5 — Late Payment Charges",
+  "Foreign Currency & Markup Charges": "MITC Page 7-9, Section I.3 — Other Service Charges",
+  "Cash Advance & ATM Withdrawal": "MITC Page 10, Section I.3 — Cash Advance",
+  "Reward Points & Capping": "MITC Page 14-18, Section I.4 — Reward Points Capping",
+  "Interest-Free Period & Grace Period": "MITC Page 22, Section I.7 — Interest-Free Period",
+  "Minimum Amount Due (MAD)": "MITC Page 23-27, Section I.1 — Minimum Amount Payable",
+  "EMI & Instalment Facility": "MITC Page 12-13, Section I.3 — Instalment Products",
+  "Fuel, Utility & Other Transaction Fees": "MITC Page 9-11, Section I.3 — Other Service Charges",
+  "Over-limit & Other Charges": "MITC Page 11, Section I.3 — Over-limit Charges",
+  "Billing & Statement": "MITC Page 23, Section I.c — Billing",
+  "Payment Methods": "MITC Page 27-28, Section I.2 — Method of Payment",
+  "Card Cancellation & Closure": "MITC Page 29, Section I.4 — Cancellation of Credit Cards",
+  "UPI on RuPay Credit Card": "MITC Page 6-7, Section I — UPI on RuPay Credit Card",
+  "Airport Lounge Access": "MITC Page 30-31, Section 8 — Airport Lounge Access",
+  "BookMyShow Offer": "MITC Page 32, Section 10 — BookMyShow Offers",
+  "Customer Care & Grievance Redressal": "MITC Page 30, Section 7 — Contact Details",
+  "Insurance Coverage": "MITC Page 31, Section 9 — Insurance Coverage",
+  "Credit Limit & Cash Limit": "MITC Page 22, Section I.7.b — Withdrawal Limits",
+  "Default & Recovery": "MITC Page 33-34, Section II.d — Default and Circumstances",
+  "Emirates Skywards Cards Changes": "MITC Page 15, Section I.4 — Emirates Skywards Changes",
+  "Spend Threshold Exclusions": "MITC Page 5-6, Section I.1 — Spend Threshold Criteria",
+  "Card Usage Policy & Restrictions": "MITC Page 34-36, Section II.e — Credit Card Usage Policy",
+  "Loss, Theft & Misuse of Card": "MITC Page 35-36, Section II.f — Loss/Theft/Misuse",
+  "Periodic Reviews & Commercial Usage": "MITC Page 35, Section II — Periodic Reviews",
+  "RBI Mandate on Standing Instructions": "MITC Page 36, Section II.g — RBI Mandate on SI",
+  "Disclosure & Credit Bureau Reporting": "MITC Page 36, Section II.h — Disclosure",
+  "SMA & NPA Classification": "MITC Page 36-40, Section II.i — SMA/NPA Classification",
+  "Termination & Surrender of Card": "MITC Page 34, Section II.e — Termination/Revocation",
+  "Compensation Policy & Grievance": "MITC Page 30, Section 7-8 — Grievance Redressal",
+  "Disclaimer & Service Providers": "MITC Page 41, Section II — Disclaimer"
+};
+
+// Follow-up question suggestions for each topic
+const topicFollowUps: Record<string, string[]> = {
+  "Joining & Annual Fees": ["How do I get my annual fee reversed?", "What are the supplementary card fees?", "Tell me about Mine Credit Card plans"],
+  "Finance Charges & Interest Rates": ["What is the interest-free period?", "How is interest calculated?", "What are the late payment charges?"],
+  "Late Payment Charges": ["What is the grace period?", "How is Minimum Amount Due calculated?", "What happens if I miss the due date?"],
+  "Foreign Currency & Markup Charges": ["What is the DCC fee?", "What is the markup for Emeralde card?", "How are foreign transactions converted?"],
+  "Cash Advance & ATM Withdrawal": ["What is the cash limit for first 180 days?", "Is there cash advance fee for Emeralde?", "Can I withdraw cash using UPI?"],
+  "Reward Points & Capping": ["What is the expiry of reward points?", "Can I get reward points on fuel?", "How do I redeem reward points?"],
+  "Interest-Free Period & Grace Period": ["What if I pay only minimum amount?", "How many days interest-free period?", "When does interest start on cash advance?"],
+  "Minimum Amount Due (MAD)": ["What is the new MAD calculation from March 2026?", "How long to pay off ₹5,000 with minimum due?", "What happens if I don't pay MAD?"],
+  "EMI & Instalment Facility": ["What are the EMI processing fees?", "Can I cancel EMI without charges?", "What are foreclosure charges?"],
+  "Fuel, Utility & Other Transaction Fees": ["Is there fuel surcharge waiver?", "What is the fee for rent payment?", "What is the education payment fee?"],
+  "Over-limit & Other Charges": ["What is the card replacement fee?", "How much is cash payment at branch?", "What is the lounge validation charge?"],
+  "Billing & Statement": ["How do I raise a billing dispute?", "What happens to refund transactions?", "Within how many days can I dispute?"],
+  "Payment Methods": ["What is the UPI ID format?", "What is the NEFT IFS code?", "How do I register for auto-debit?"],
+  "Card Cancellation & Closure": ["What is the 30-day activation rule?", "What happens if card is inactive for 12 months?", "How do I terminate my card?"],
+  "UPI on RuPay Credit Card": ["What transactions are allowed on UPI?", "Do I need to re-register on device change?", "Can I withdraw cash using UPI?"],
+  "Airport Lounge Access": ["What is the spend criteria for lounge?", "Which cards are exempt from spend criteria?", "What is the validation charge?"],
+  "BookMyShow Offer": ["What is the spend criteria?", "Which cards are eligible?", "Is Secured Platinum eligible?"],
+  "Customer Care & Grievance Redressal": ["Who is the Principal Nodal Officer?", "How do I report mis-selling?", "What is the toll-free number?"],
+  "Insurance Coverage": ["How do I file an insurance claim?", "Who is the insurer?", "What is the claim toll-free number?"],
+  "Credit Limit & Cash Limit": ["Can I have multiple credit cards?", "How is cash limit determined?", "Can bank change my credit limit?"],
+  "Default & Recovery": ["What is wilful defaulter?", "How is default reported to CIBIL?", "What happens in case of death?"],
+  "Emirates Skywards Cards Changes": ["How do I get Gold tier?", "What are the new Miles rates?", "Which categories don't earn Miles?"],
+  "Spend Threshold Exclusions": ["What's excluded from spend threshold?", "Are EMI transactions included?", "Are rent payments included?"],
+  "Card Usage Policy & Restrictions": ["Can I use card for business?", "How many times can I replace card?", "Can I make excess payments?"],
+  "Loss, Theft & Misuse of Card": ["How do I block my card?", "Am I liable after reporting loss?", "How long for replacement card?"],
+  "Periodic Reviews & Commercial Usage": ["What triggers card review?", "Can bank cancel card without notice?", "What is self-funding?"],
+  "RBI Mandate on Standing Instructions": ["How do I re-register utility bills?", "Is bank liable for SI failure?", "Since when is this effective?"],
+  "Disclosure & Credit Bureau Reporting": ["Does ICICI share info with CIBIL?", "How often is data reported?", "How to update KYC details?"],
+  "SMA & NPA Classification": ["What is SMA-0, SMA-1, SMA-2?", "When does account become NPA?", "How is NPA upgraded to standard?"],
+  "Termination & Surrender of Card": ["How do I terminate my card?", "When is termination effective?", "Can bank change card type?"],
+  "Compensation Policy & Grievance": ["How do I escalate a complaint?", "Where is the compensation policy?", "What is the grievance toll-free number?"],
+  "Disclaimer & Service Providers": ["Can bank share my info?", "Does bank retain documents?", "Can bank contact via WhatsApp?"]
+};
+
 // Search knowledge base for relevant context — improved matching algorithm
-function findRelevantContext(message: string): string {
+// Returns { context, topic } where topic is the top matched topic name
+function findRelevantContext(message: string): { context: string; topic: string | null } {
   const lowerMsg = message.toLowerCase();
   // Create word boundary regex for matching whole words only
   const wordMatch = (kw: string, text: string): boolean => {
@@ -262,23 +335,26 @@ function findRelevantContext(message: string): string {
 
   if (sorted.length > 0) {
     const topScore = sorted[0].score;
-
-    // Only include topics that have at least 40% of the top score
     const threshold = Math.max(topScore * 0.4, 2);
-
     relevant = sorted.filter(e => e.score >= threshold).slice(0, 2);
   }
 
   if (relevant.length === 0) {
-    return "No specific knowledge base match found. The bot should respond generally and offer to help with ICICI Bank Credit Card related queries.";
+    return {
+      context: "No specific knowledge base match found. The bot should respond generally and offer to help with ICICI Bank Credit Card related queries.",
+      topic: null
+    };
   }
 
-  return relevant.map(e => `[${e.topic}]: ${e.answer}`).join('\n\n');
+  return {
+    context: relevant.map(e => `[${e.topic}]: ${e.answer}`).join('\n\n'),
+    topic: relevant[0].topic
+  };
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, sessionId } = await request.json();
+    const { message, sessionId, history } = await request.json();
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json(
@@ -287,8 +363,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const context = findRelevantContext(message);
+    const { context, topic } = findRelevantContext(message);
     const hasContext = !context.startsWith('No specific');
+
+    // Build conversation messages for memory (last 5 turns)
+    const conversationMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
 
     const systemPrompt = `You are ICICI Card Assistant — a friendly, helpful bot that answers questions about ICICI Bank Credit Cards based on the official Most Important Terms and Conditions (MITC) document (last updated March 5, 2026).
 
@@ -298,6 +377,7 @@ Your personality:
 - Use bold formatting for important numbers, fees, and rates
 - You NEVER make up information not in the knowledge base
 - Always cite which section of MITC the answer comes from when relevant
+- You remember the conversation context — refer to previous questions when relevant
 
 ${hasContext ? `KNOWLEDGE BASE CONTEXT (use this to answer):\n${context}` : 'No matching knowledge base entry found. Politely explain you don\'t have specific information on this topic and suggest contacting ICICI Bank Customer Care at 1800 1080.'}
 
@@ -314,6 +394,11 @@ CRITICAL RULES FOR CONTEXT SELECTION:
 - Always read the question carefully and pick the MOST RELEVANT section from the context provided.
 - If the question is about a specific fee (e.g., late payment, fuel surcharge, foreign markup), answer ONLY about that fee — do not list all fees.
 
+CONVERSATION MEMORY:
+- The user may ask follow-up questions referring to previous context (e.g., "and for Emeralde?" after asking about fees).
+- Use the conversation history provided to understand what the user is referring to.
+- If the follow-up is unclear without context, politely ask for clarification.
+
 Rules:
 1. Answer based ONLY on the provided knowledge base context when available
 2. If no context matches, say: "I don't have specific information about that. For detailed assistance, please contact ICICI Bank Customer Care at 1800 1080 or visit https://www.icici.bank.in/"
@@ -322,6 +407,24 @@ Rules:
 5. Never invent fees, rates, or policies not in the context
 6. This information is based on MITC document last updated March 5, 2026
 7. For complex queries, suggest referring to the complete Terms and Conditions at https://www.icici.bank.in/`;
+
+    conversationMessages.push({ role: 'system', content: systemPrompt });
+
+    // Add conversation history (last 5 messages = ~2.5 turns)
+    if (Array.isArray(history) && history.length > 0) {
+      const recentHistory = history.slice(-10); // Max 10 messages
+      recentHistory.forEach((msg: { role: string; content: string }) => {
+        if (msg.role === 'user' || msg.role === 'assistant') {
+          conversationMessages.push({
+            role: msg.role as 'user' | 'assistant',
+            content: msg.content
+          });
+        }
+      });
+    }
+
+    // Add current message
+    conversationMessages.push({ role: 'user', content: message });
 
     let botReply: string;
 
@@ -332,10 +435,7 @@ Rules:
 
       const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: message }
-        ],
+        messages: conversationMessages,
         temperature: 0.2,
         max_tokens: 800,
       });
@@ -343,19 +443,18 @@ Rules:
       botReply = response.choices?.[0]?.message?.content ||
         "I'm having trouble processing that right now. Please try again or contact ICICI Bank Customer Care at 1800 1080.";
     } catch {
-      if (hasContext) {
-        // Reuse the same findRelevantContext function to get the BEST match
-        // The context already contains the top matches, extract the first one
-        const contextLines = context.split('\n\n');
-        const firstSection = contextLines[0];
-        const topEntry = knowledgeBase.find(entry =>
-          firstSection.startsWith(`[${entry.topic}]:`)
-        );
+      // Fallback: use the knowledge base answer directly without LLM
+      if (hasContext && topic) {
+        const topEntry = knowledgeBase.find(entry => entry.topic === topic);
         botReply = topEntry?.answer || "I found a match in our knowledge base but couldn't format the response. Please try again or contact ICICI Bank Customer Care at 1800 1080.";
       } else {
         botReply = "I don't have specific information about that. For detailed assistance, please contact ICICI Bank Customer Care at 1800 1080 or visit https://www.icici.bank.in/. You can also ask me about credit card fees, interest rates, reward points, billing, EMI options, lounge access, or any other ICICI credit card topic!";
       }
     }
+
+    // Get source citation and follow-ups for the matched topic
+    const source = topic ? (topicSources[topic] || null) : null;
+    const followUps = topic ? (topicFollowUps[topic] || []) : [];
 
     const nodesTriggered = hasContext
       ? ['Webhook', 'Knowledge Base', 'AI Agent', 'Response']
@@ -365,7 +464,9 @@ Rules:
       reply: botReply,
       nodesTriggered,
       knowledgeBaseHit: hasContext,
-      topic: hasContext ? context.split(']:')[0].replace('[', '') : null,
+      topic,
+      source,
+      followUps,
       sessionId: sessionId || 'default',
       timestamp: new Date().toISOString(),
     });
@@ -384,6 +485,8 @@ Rules:
       nodesTriggered: ['Webhook', 'AI Agent', 'Response'],
       knowledgeBaseHit: false,
       topic: null,
+      source: null,
+      followUps: [],
       sessionId: 'default',
       timestamp: new Date().toISOString(),
     });

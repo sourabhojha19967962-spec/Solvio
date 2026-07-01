@@ -35,6 +35,8 @@ interface ChatMessage {
   nodesTriggered?: string[];
   knowledgeBaseHit?: boolean;
   topic?: string | null;
+  source?: string | null;
+  followUps?: string[];
 }
 
 interface WorkflowNode {
@@ -86,6 +88,7 @@ export default function DemoPage() {
   const [workflowNodes, setWorkflowNodes] = useState<WorkflowNode[]>(defaultNodes);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [sessionId] = useState(() => `user-${Math.random().toString(36).substr(2, 9)}`);
+  const [calcAmount, setCalcAmount] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -126,13 +129,20 @@ export default function DemoPage() {
       content: text,
       timestamp: new Date(),
     };
+
+    // Build history from current messages (before adding the new user message)
+    const history = messages.map(m => ({
+      role: m.role === 'bot' ? 'assistant' : 'user',
+      content: m.content,
+    }));
+
     setMessages(prev => [...prev, userMsg]);
 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, sessionId }),
+        body: JSON.stringify({ message: text, sessionId, history }),
       });
 
       const data = await res.json();
@@ -146,6 +156,8 @@ export default function DemoPage() {
         nodesTriggered: data.nodesTriggered,
         knowledgeBaseHit: data.knowledgeBaseHit,
         topic: data.topic,
+        source: data.source,
+        followUps: data.followUps || [],
       };
       setMessages(prev => [...prev, botMsg]);
     } catch {
@@ -160,13 +172,32 @@ export default function DemoPage() {
       setIsLoading(false);
       inputRef.current?.focus();
     }
-  }, [input, isLoading, sessionId, animateNodes]);
+  }, [input, isLoading, sessionId, animateNodes, messages]);
 
   const resetChat = useCallback(() => {
     setMessages([]);
     setWorkflowNodes(defaultNodes.map(n => ({ ...n, active: false })));
     setActiveNodeId(null);
   }, []);
+
+  // Late Payment Fee Calculator
+  const calculateLateFee = (amount: number): { fee: number; gst: number; total: number; slab: string } | null => {
+    if (isNaN(amount) || amount < 0) return null;
+    let fee = 0;
+    let slab = '';
+    if (amount < 100) { fee = 0; slab = 'Less than ₹100'; }
+    else if (amount <= 500) { fee = 100; slab = '₹100 - ₹500'; }
+    else if (amount <= 1000) { fee = 500; slab = '₹501 - ₹1,000'; }
+    else if (amount <= 5000) { fee = 600; slab = '₹1,001 - ₹5,000'; }
+    else if (amount <= 10000) { fee = 750; slab = '₹5,001 - ₹10,000'; }
+    else if (amount <= 25000) { fee = 900; slab = '₹10,001 - ₹25,000'; }
+    else if (amount <= 50000) { fee = 1100; slab = '₹25,001 - ₹50,000'; }
+    else { fee = 1300; slab = 'More than ₹50,000'; }
+    const gst = Math.round(fee * 0.18);
+    return { fee, gst, total: fee + gst, slab };
+  };
+
+  const calcResult = calcAmount ? calculateLateFee(parseFloat(calcAmount)) : null;
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100">
@@ -306,6 +337,55 @@ export default function DemoPage() {
               ))}
             </div>
           </Card>
+
+          {/* Late Payment Fee Calculator */}
+          <Card className="p-4 border-slate-200 shadow-sm mt-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="w-4 h-4 text-emerald-500" />
+              <h2 className="text-sm font-semibold text-slate-700">Late Fee Calculator</h2>
+            </div>
+            <p className="text-[11px] text-slate-400 mb-3">
+              Enter your outstanding amount to calculate late payment charges.
+            </p>
+            <div className="space-y-2">
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                <Input
+                  type="number"
+                  placeholder="Enter outstanding amount"
+                  value={calcAmount}
+                  onChange={(e) => setCalcAmount(e.target.value)}
+                  className="pl-7 text-sm h-9 border-slate-200 focus:border-emerald-400 focus:ring-emerald-400/20"
+                />
+              </div>
+              {calcResult && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Slab:</span>
+                    <span className="font-medium text-slate-700">{calcResult.slab}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Late Fee:</span>
+                    <span className="font-medium text-slate-700">₹{calcResult.fee}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">GST (18%):</span>
+                    <span className="font-medium text-slate-700">₹{calcResult.gst}</span>
+                  </div>
+                  <div className="border-t border-emerald-200 pt-1.5 flex justify-between text-sm">
+                    <span className="font-semibold text-slate-700">Total:</span>
+                    <span className="font-bold text-emerald-700">₹{calcResult.total}</span>
+                  </div>
+                  {calcResult.fee === 0 && (
+                    <p className="text-[10px] text-emerald-600 mt-1">✓ No late payment fee for amounts below ₹100</p>
+                  )}
+                </div>
+              )}
+              <p className="text-[10px] text-slate-400">
+                * Excludes Emeralde Private Metal card. Based on MITC w.e.f Nov 15, 2024.
+              </p>
+            </div>
+          </Card>
         </div>
 
         {/* Right: Chat Interface */}
@@ -369,7 +449,7 @@ export default function DemoPage() {
                           {msg.content}
                         </div>
                         {msg.role === 'bot' && msg.knowledgeBaseHit !== undefined && (
-                          <div className="flex items-center gap-2 mt-1.5 px-1">
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5 px-1">
                             {msg.knowledgeBaseHit ? (
                               <Badge variant="outline" className="text-[10px] border-emerald-200 text-emerald-600 bg-emerald-50 gap-1">
                                 <Database className="w-2.5 h-2.5" />
@@ -387,6 +467,26 @@ export default function DemoPage() {
                                 {msg.nodesTriggered.length} nodes
                               </Badge>
                             )}
+                            {msg.source && (
+                              <Badge variant="outline" className="text-[9px] border-violet-200 text-violet-600 bg-violet-50 gap-1" title={msg.source}>
+                                <BookOpen className="w-2.5 h-2.5" />
+                                {msg.source.length > 40 ? msg.source.substring(0, 40) + '...' : msg.source}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                        {msg.role === 'bot' && msg.followUps && msg.followUps.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2 px-1">
+                            {msg.followUps.map((q, i) => (
+                              <button
+                                key={i}
+                                onClick={() => sendMessage(q)}
+                                disabled={isLoading}
+                                className="text-[11px] px-2.5 py-1 rounded-full border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:border-emerald-300 transition-colors disabled:opacity-50"
+                              >
+                                {q}
+                              </button>
+                            ))}
                           </div>
                         )}
                         <div className="text-[10px] text-slate-400 mt-1 px-1">
