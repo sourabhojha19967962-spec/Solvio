@@ -167,13 +167,67 @@ const knowledgeBase = [
   }
 ];
 
-// Search knowledge base for relevant context
+// Search knowledge base for relevant context — improved matching algorithm
 function findRelevantContext(message: string): string {
   const lowerMsg = message.toLowerCase();
+  const words = lowerMsg.split(/\s+/).filter(w => w.length > 2);
+
   const scored = knowledgeBase.map(entry => {
-    const score = entry.keywords.reduce((acc, kw) => {
-      return acc + (lowerMsg.includes(kw.toLowerCase()) ? 1 : 0);
-    }, 0);
+    let score = 0;
+    let matchedKeywords = 0;
+
+    entry.keywords.forEach(kw => {
+      const lowerKw = kw.toLowerCase();
+      if (lowerMsg.includes(lowerKw)) {
+        // Longer keyword matches get higher weight (more specific)
+        const weight = lowerKw.split(' ').length > 1 ? 3 : 1;
+        score += weight;
+        matchedKeywords++;
+      }
+    });
+
+    // Bonus for matching multiple different keywords from same topic
+    if (matchedKeywords >= 2) score += 2;
+    if (matchedKeywords >= 3) score += 3;
+
+    // Special intent detection — boost specific topics for specific question patterns
+    const msgContains = (terms: string[]) => terms.some(t => lowerMsg.includes(t));
+
+    // UPI on RuPay card questions (not general UPI payments)
+    if (entry.topic === "UPI on RuPay Credit Card" && msgContains(['rupay', 'cc on upi', 'upi on credit', 'upi pin', 'p2m', 'device change', 're-register', 're-register upi', 'change device', 'new device'])) {
+      score += 10;
+    }
+
+    // Lost/stolen card questions
+    if (entry.topic === "Loss, Theft & Misuse of Card" && msgContains(['lost', 'stolen', 'theft', 'misuse', 'ccblk', 'block card', '5676766'])) {
+      score += 10;
+    }
+
+    // Termination questions
+    if (entry.topic === "Termination & Surrender of Card" && msgContains(['terminate', 'surrender', 'close card', 'cancel card', 'cancel my card', 'close my card'])) {
+      score += 10;
+    }
+
+    // SMA/NPA questions
+    if (entry.topic === "SMA & NPA Classification" && msgContains(['sma', 'npa', 'non performing', 'special mention', '90 days', 'default classification'])) {
+      score += 10;
+    }
+
+    // EMI questions (not general payments)
+    if (entry.topic === "EMI & Instalment Facility" && msgContains(['emi', 'instalment', 'installment', 'foreclosure', 'prepayment', 'prepay'])) {
+      score += 8;
+    }
+
+    // Lounge access questions
+    if (entry.topic === "Airport Lounge Access" && msgContains(['lounge', 'airport'])) {
+      score += 10;
+    }
+
+    // Penalty for Payment Methods topic when question is about UPI features (not payment methods)
+    if (entry.topic === "Payment Methods" && msgContains(['rupay', 'cc on upi', 'upi pin', 'p2m', 'device change', 're-register', 'change device'])) {
+      score -= 5;
+    }
+
     return { ...entry, score };
   });
 
@@ -213,6 +267,15 @@ Your personality:
 - Always cite which section of MITC the answer comes from when relevant
 
 ${hasContext ? `KNOWLEDGE BASE CONTEXT (use this to answer):\n${context}` : 'No matching knowledge base entry found. Politely explain you don\'t have specific information on this topic and suggest contacting ICICI Bank Customer Care at 1800 1080.'}
+
+CRITICAL RULES FOR CONTEXT SELECTION:
+- If the user asks about UPI on RuPay Credit Card (e.g., device change, re-register, UPI PIN, P2M), use ONLY the "UPI on RuPay Credit Card" section — NOT the "Payment Methods" section.
+- If the user asks about general payment methods (how to pay bill), use the "Payment Methods" section.
+- If the user asks about lost/stolen card, use ONLY "Loss, Theft & Misuse of Card" section.
+- If the user asks about EMI/instalment, use ONLY "EMI & Instalment Facility" section — NOT "Payment Methods".
+- If the user asks about SMA/NPA/default classification, use ONLY "SMA & NPA Classification" section.
+- If the user asks about card cancellation/termination, use ONLY "Termination & Surrender of Card" section.
+- Always read the question carefully and pick the MOST RELEVANT section from the context provided.
 
 Rules:
 1. Answer based ONLY on the provided knowledge base context when available
