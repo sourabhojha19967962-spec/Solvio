@@ -1,0 +1,850 @@
+     1→'use client';
+     2→
+     3→import { useState, useRef, useEffect, useCallback } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  Bot,
+     7→  Send,
+     8→  User,
+     9→  Workflow,
+    10→  Database,
+    11→  Globe,
+    12→  Cpu,
+    13→  ArrowRight,
+    14→  Zap,
+    15→  MessageSquare,
+    16→  Sparkles,
+    17→  RotateCcw,
+    18→  BookOpen,
+    19→  Shield,
+    20→  AlertCircle,
+    21→  Check,
+    22→  ChevronDown,
+    23→  Play,
+    24→  Star,
+    25→  Users,
+    26→  Clock,
+    27→  TrendingUp,
+    28→  Lock,
+    29→  Headphones,
+    30→  ArrowUpRight,
+    31→} from 'lucide-react';
+    32→import { Button } from '@/components/ui/button';
+    33→import { Card } from '@/components/ui/card';
+    34→import { Badge } from '@/components/ui/badge';
+    35→import { ScrollArea } from '@/components/ui/scroll-area';
+    36→import { Input } from '@/components/ui/input';
+    37→
+    38→// ─── Chat Types & Data ────────────────────────────────────
+    39→interface ChatMessage {
+    40→  id: string;
+    41→  role: 'user' | 'bot';
+    42→  content: string;
+    43→  timestamp: Date;
+    44→  nodesTriggered?: string[];
+    45→  knowledgeBaseHit?: boolean;
+    46→  topic?: string | null;
+    47→}
+    48→
+    49→interface WorkflowNode {
+    50→  id: string;
+    51→  label: string;
+    52→  icon: React.ReactNode;
+    53→  active: boolean;
+    54→  color: string;
+    55→  description: string;
+    56→}
+    57→
+    58→const quickActions = [
+    59→  { label: 'Reset Password', message: 'How do I reset my password?', icon: Shield },
+    60→  { label: 'Pricing Info', message: 'What are your pricing plans?', icon: Zap },
+    61→  { label: 'Setup Integration', message: 'How do I set up integrations?', icon: Globe },
+    62→  { label: 'Fix Workflow Error', message: 'My workflow is failing, how do I debug it?', icon: AlertCircle },
+    63→];
+    64→
+    65→const defaultNodes: WorkflowNode[] = [
+    66→  { id: 'webhook', label: 'Webhook', icon: <Globe className="w-4 h-4" />, active: false, color: 'emerald', description: 'Receives user message' },
+    67→  { id: 'kb', label: 'Knowledge Base', icon: <Database className="w-4 h-4" />, active: false, color: 'amber', description: 'Searches FAQ docs' },
+    68→  { id: 'agent', label: 'AI Agent', icon: <Cpu className="w-4 h-4" />, active: false, color: 'violet', description: 'Processes with LLM' },
+    69→  { id: 'response', label: 'Response', icon: <MessageSquare className="w-4 h-4" />, active: false, color: 'sky', description: 'Sends reply to user' },
+    70→];
+    71→
+    72→const fallbackNodes: WorkflowNode[] = [
+    73→  { id: 'webhook', label: 'Webhook', icon: <Globe className="w-4 h-4" />, active: false, color: 'emerald', description: 'Receives user message' },
+    74→  { id: 'agent', label: 'AI Agent', icon: <Cpu className="w-4 h-4" />, active: false, color: 'violet', description: 'Processes with LLM' },
+    75→  { id: 'fallback', label: 'Fallback Handler', icon: <AlertCircle className="w-4 h-4" />, active: false, color: 'rose', description: 'No KB match found' },
+    76→  { id: 'response', label: 'Response', icon: <MessageSquare className="w-4 h-4" />, active: false, color: 'sky', description: 'Sends reply to user' },
+    77→];
+    78→
+    79→function getNodeColor(color: string, active: boolean) {
+    80→  const colors: Record<string, { bg: string; border: string; text: string; glow: string }> = {
+    81→    emerald: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/40', text: 'text-emerald-600', glow: 'shadow-emerald-500/30' },
+    82→    amber: { bg: 'bg-amber-500/10', border: 'border-amber-500/40', text: 'text-amber-600', glow: 'shadow-amber-500/30' },
+    83→    violet: { bg: 'bg-violet-500/10', border: 'border-violet-500/40', text: 'text-violet-600', glow: 'shadow-violet-500/30' },
+    84→    sky: { bg: 'bg-sky-500/10', border: 'border-sky-500/40', text: 'text-sky-600', glow: 'shadow-sky-500/30' },
+    85→    rose: { bg: 'bg-rose-500/10', border: 'border-rose-500/40', text: 'text-rose-600', glow: 'shadow-rose-500/30' },
+    86→  };
+    87→  const c = colors[color] || colors.sky;
+    88→  return active ? c : { bg: 'bg-muted/50', border: 'border-border', text: 'text-muted-foreground', glow: '' };
+    89→}
+    90→
+    91→// ─── FAQ Data ──────────────────────────────────────────────
+    92→const faqs = [
+    93→  {
+    94→    q: 'How is FlowBot different from Intercom or Zendesk AI?',
+    95→    a: 'FlowBot is built specifically for automation-first teams. Unlike generic support tools, it natively integrates with n8n and Make.com workflows — so your bot doesn\'t just answer questions, it takes action (creates tickets, triggers automations, updates CRMs). Plus, we offer self-hosted options for data privacy.',
+    96→  },
+    97→  {
+    98→    q: 'Can I self-host FlowBot on my own servers?',
+    99→    a: 'Yes! Our Pro and Enterprise plans include a self-hosted option. This means your customer data and conversations never leave your infrastructure — critical for GDPR compliance, healthcare (HIPAA), and finance companies.',
+   100→  },
+   101→  {
+   102→    q: 'How does the knowledge base work?',
+   103→    a: 'Upload your docs (PDFs, help articles, website URLs, Notion pages) and we automatically chunk, embed, and index them using vector databases. When a customer asks a question, FlowBot searches for the most relevant context and generates an answer grounded in YOUR documentation — no hallucinations.',
+   104→  },
+   105→  {
+   106→    q: 'What happens when the bot can\'t answer?',
+   107→    a: 'FlowBot gracefully hands off to a human agent. It can create a ticket in Zendesk/Intercom, send a Slack notification, or route the conversation to the right team — all configurable in your workflow.',
+   108→  },
+   109→  {
+   110→    q: 'How accurate are the AI responses?',
+   111→    a: 'Because FlowBot only answers from your knowledge base (not the open internet), accuracy is typically 90%+. Responses include source references so customers can verify. You can also set confidence thresholds — if the bot isn\'t sure, it defaults to human handoff.',
+   112→  },
+   113→  {
+   114→    q: 'Can I customize the chat widget to match my brand?',
+   115→    a: 'Absolutely. Full white-label support: custom colors, logo, font, position, greeting message, and avatar. Your customers will never know it\'s a third-party tool.',
+   116→  },
+   117→];
+   118→
+   119→// ─── Main Component ────────────────────────────────────────
+   120→export default function Home() {
+   121→  // Chat state
+   122→  const [messages, setMessages] = useState<ChatMessage[]>([]);
+   123→  const [input, setInput] = useState('');
+   124→  const [isLoading, setIsLoading] = useState(false);
+   125→  const [workflowNodes, setWorkflowNodes] = useState<WorkflowNode[]>(defaultNodes);
+   126→  const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
+   127→  const [sessionId] = useState(() => `user-${Math.random().toString(36).substr(2, 9)}`);
+   128→  const scrollRef = useRef<HTMLDivElement>(null);
+   129→  const inputRef = useRef<HTMLInputElement>(null);
+   130→
+   131→  // Waitlist state
+   132→  const [wlEmail, setWlEmail] = useState('');
+   133→  const [wlCompany, setWlCompany] = useState('');
+   134→  const [wlStatus, setWlStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+   135→  const [wlMessage, setWlMessage] = useState('');
+   136→
+   137→  // FAQ state
+   138→  const [openFaq, setOpenFaq] = useState<number | null>(null);
+   139→
+   140→  // Active section for demo
+   141→  const [showDemo, setShowDemo] = useState(false);
+   142→
+   143→  // Auto-scroll
+   144→  useEffect(() => {
+   145→    if (scrollRef.current) {
+   146→      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+   147→    }
+   148→  }, [messages, isLoading]);
+   149→
+   150→  // Animate workflow nodes
+   151→  const animateNodes = useCallback(async (nodesTriggered: string[], isFallback: boolean) => {
+   152→    const targetNodes = isFallback ? fallbackNodes : defaultNodes;
+   153→    setWorkflowNodes(targetNodes.map(n => ({ ...n, active: false })));
+   154→
+   155→    for (let i = 0; i < nodesTriggered.length; i++) {
+   156→      const nodeName = nodesTriggered[i];
+   157→      await new Promise(resolve => setTimeout(resolve, 400));
+   158→      setWorkflowNodes(prev => prev.map(n =>
+   159→        n.label === nodeName ? { ...n, active: true } : n
+   160→      ));
+   161→      setActiveNodeId(nodeName);
+   162→      await new Promise(resolve => setTimeout(resolve, 300));
+   163→    }
+   164→
+   165→    await new Promise(resolve => setTimeout(resolve, 1500));
+   166→    setActiveNodeId(null);
+   167→  }, []);
+   168→
+   169→  // Send message
+   170→  const sendMessage = useCallback(async (messageText?: string) => {
+   171→    const text = messageText || input.trim();
+   172→    if (!text || isLoading) return;
+   173→
+   174→    setInput('');
+   175→    setIsLoading(true);
+   176→
+   177→    const userMsg: ChatMessage = {
+   178→      id: `msg-${Date.now()}`,
+   179→      role: 'user',
+   180→      content: text,
+   181→      timestamp: new Date(),
+   182→    };
+   183→    setMessages(prev => [...prev, userMsg]);
+   184→
+   185→    try {
+   186→      const res = await fetch('/api/chat', {
+   187→        method: 'POST',
+   188→        headers: { 'Content-Type': 'application/json' },
+   189→        body: JSON.stringify({ message: text, sessionId }),
+   190→      });
+   191→
+   192→      const data = await res.json();
+   193→      await animateNodes(data.nodesTriggered || ['Webhook', 'AI Agent', 'Response'], !data.knowledgeBaseHit);
+   194→
+   195→      const botMsg: ChatMessage = {
+   196→        id: `msg-${Date.now()}-bot`,
+   197→        role: 'bot',
+   198→        content: data.reply,
+   199→        timestamp: new Date(),
+   200→        nodesTriggered: data.nodesTriggered,
+   201→        knowledgeBaseHit: data.knowledgeBaseHit,
+   202→        topic: data.topic,
+   203→      };
+   204→      setMessages(prev => [...prev, botMsg]);
+   205→    } catch {
+   206→      const botMsg: ChatMessage = {
+   207→        id: `msg-${Date.now()}-bot`,
+   208→        role: 'bot',
+   209→        content: "I'm having trouble connecting right now. Please try again in a moment!",
+   210→        timestamp: new Date(),
+   211→      };
+   212→      setMessages(prev => [...prev, botMsg]);
+   213→    } finally {
+   214→      setIsLoading(false);
+   215→      inputRef.current?.focus();
+   216→    }
+   217→  }, [input, isLoading, sessionId, animateNodes]);
+   218→
+   219→  const resetChat = useCallback(() => {
+   220→    setMessages([]);
+   221→    setWorkflowNodes(defaultNodes.map(n => ({ ...n, active: false })));
+   222→    setActiveNodeId(null);
+   223→  }, []);
+   224→
+   225→  // Waitlist submit
+   226→  const handleWaitlist = async (e: React.FormEvent) => {
+   227→    e.preventDefault();
+   228→    if (!wlEmail.trim()) return;
+   229→    setWlStatus('loading');
+   230→    try {
+   231→      const res = await fetch('/api/waitlist', {
+   232→        method: 'POST',
+   233→        headers: { 'Content-Type': 'application/json' },
+   234→        body: JSON.stringify({ email: wlEmail, company: wlCompany }),
+   235→      });
+   236→      const data = await res.json();
+   237→      if (res.ok) {
+   238→        setWlStatus('success');
+   239→        setWlMessage(data.message);
+   240→      } else {
+   241→        setWlStatus('error');
+   242→        setWlMessage(data.error || 'Something went wrong');
+   243→      }
+   244→    } catch {
+   245→      setWlStatus('error');
+   246→      setWlMessage('Network error. Please try again.');
+   247→    }
+   248→  };
+   249→
+   250→  return (
+   251→    <div className="min-h-screen flex flex-col bg-white">
+   252→      {/* ─── Navbar ─── */}
+   253→      <nav className="border-b border-slate-100 bg-white/90 backdrop-blur-md sticky top-0 z-50">
+   254→        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+   255→          <div className="flex items-center gap-2.5">
+   256→            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md shadow-emerald-500/20">
+   257→              <Workflow className="w-4.5 h-4.5 text-white" />
+   258→            </div>
+   259→            <span className="text-lg font-bold text-slate-900 tracking-tight">FlowBot</span>
+   260→            <Badge variant="outline" className="text-[10px] border-emerald-200 text-emerald-700 bg-emerald-50 ml-1">
+   261→              Early Access
+   262→            </Badge>
+   263→          </div>
+   264→          <div className="hidden sm:flex items-center gap-6 text-sm text-slate-600">
+   265→            <a href="#features" className="hover:text-slate-900 transition-colors">Features</a>
+   266→            <a href="#demo" className="hover:text-slate-900 transition-colors">Live Demo</a>
+   267→            <a href="#pricing" className="hover:text-slate-900 transition-colors">Pricing</a>
+   268→            <a href="#faq" className="hover:text-slate-900 transition-colors">FAQ</a>
+   269→          </div>
+   270→          <Button
+   271→            size="sm"
+   272→            className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+   273→            onClick={() => document.getElementById('waitlist')?.scrollIntoView({ behavior: 'smooth' })}
+   274→          >
+   275→            Join Waitlist
+   276→          </Button>
+   277→        </div>
+   278→      </nav>
+   279→
+   280→      {/* ─── Hero ─── */}
+   281→      <section className="relative overflow-hidden">
+   282→        <div className="absolute inset-0 bg-gradient-to-b from-emerald-50/50 via-white to-white" />
+   283→        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-16 pb-20 text-center">
+   284→          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+   285→            <Badge variant="outline" className="mb-6 border-emerald-200 text-emerald-700 bg-emerald-50 gap-1.5 px-3 py-1">
+   286→              <Sparkles className="w-3.5 h-3.5" />
+   287→              Built for n8n &amp; Make.com teams
+   288→            </Badge>
+   289→            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-slate-900 tracking-tight leading-tight mb-6">
+   290→              AI Support Bot<br />
+   291→              <span className="bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
+   292→                That Actually Does Things
+   293→              </span>
+   294→            </h1>
+   295→            <p className="text-lg sm:text-xl text-slate-600 max-w-2xl mx-auto mb-8 leading-relaxed">
+   296→              Don&apos;t just answer questions — resolve them. FlowBot connects your knowledge base to AI and automation workflows, so your support bot can take action, not just talk.
+   297→            </p>
+   298→            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+   299→              <Button
+   300→                size="lg"
+   301→                className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20 gap-2 px-8"
+   302→                onClick={() => document.getElementById('waitlist')?.scrollIntoView({ behavior: 'smooth' })}
+   303→              >
+   304→                Get Early Access
+   305→                <ArrowRight className="w-4 h-4" />
+   306→              </Button>
+   307→              <Button
+   308→                size="lg"
+   309→                variant="outline"
+   310→                className="gap-2 border-slate-200 text-slate-700 hover:bg-slate-50"
+   311→                onClick={() => setShowDemo(true)}
+   312→              >
+   313→                <Play className="w-4 h-4" />
+   314→                Try Live Demo
+   315→              </Button>
+   316→            </div>
+   317→
+   318→            {/* Social proof */}
+   319→            <div className="mt-10 flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500">
+   320→              <div className="flex items-center gap-1.5">
+   321→                <Users className="w-4 h-4 text-emerald-500" />
+   322→                <span><strong className="text-slate-700">50+</strong> teams on waitlist</span>
+   323→              </div>
+   324→              <div className="flex items-center gap-1.5">
+   325→                <Clock className="w-4 h-4 text-emerald-500" />
+   326→                <span><strong className="text-slate-700">73%</strong> auto-resolution rate</span>
+   327→              </div>
+   328→              <div className="flex items-center gap-1.5">
+   329→                <TrendingUp className="w-4 h-4 text-emerald-500" />
+   330→                <span><strong className="text-slate-700">5x</strong> faster than email support</span>
+   331→              </div>
+   332→            </div>
+   333→          </motion.div>
+   334→        </div>
+   335→      </section>
+   336→
+   337→      {/* ─── How It Works ─── */}
+   338→      <section className="py-16 bg-slate-50/50">
+   339→        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+   340→          <div className="text-center mb-12">
+   341→            <h2 className="text-3xl font-bold text-slate-900 mb-3">How It Works</h2>
+   342→            <p className="text-slate-600 max-w-lg mx-auto">Three steps to an AI support bot that resolves tickets, not just replies to them.</p>
+   343→          </div>
+   344→          <div className="grid md:grid-cols-3 gap-6">
+   345→            {[
+   346→              {
+   347→                step: '01',
+   348→                icon: <Database className="w-6 h-6" />,
+   349→                title: 'Upload Your Docs',
+   350→                desc: 'Connect your help center, PDFs, Notion pages, or website. We auto-chunk and embed everything into a vector database — ready for instant semantic search.',
+   351→                color: 'emerald',
+   352→              },
+   353→              {
+   354→                step: '02',
+   355→                icon: <Workflow className="w-6 h-6" />,
+   356→                title: 'Design Your Workflow',
+   357→                desc: 'Use our n8n-style visual builder to define how your bot handles questions: KB lookup → AI response → action (create ticket, send Slack, update CRM).',
+   358→                color: 'teal',
+   359→              },
+   360→              {
+   361→                step: '03',
+   362→                icon: <Bot className="w-6 h-6" />,
+   363→                title: 'Deploy & Iterate',
+   364→                desc: 'Embed the widget on your site with one line of code. Monitor analytics, refine your knowledge base, and watch your auto-resolution rate climb.',
+   365→                color: 'violet',
+   366→              },
+   367→            ].map((item, i) => (
+   368→              <motion.div
+   369→                key={item.step}
+   370→                initial={{ opacity: 0, y: 20 }}
+   371→                animate={{ opacity: 1, y: 0 }}
+   372→                transition={{ duration: 0.5, delay: i * 0.15 }}
+   373→              >
+   374→                <Card className="p-6 h-full border-slate-200 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+   375→                  <div className="flex items-center gap-3 mb-4">
+   376→                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${item.color === 'emerald' ? 'bg-emerald-100 text-emerald-600' : item.color === 'teal' ? 'bg-teal-100 text-teal-600' : 'bg-violet-100 text-violet-600'}`}>
+   377→                      {item.icon}
+   378→                    </div>
+   379→                    <span className="text-xs font-mono text-slate-400">STEP {item.step}</span>
+   380→                  </div>
+   381→                  <h3 className="text-lg font-semibold text-slate-900 mb-2">{item.title}</h3>
+   382→                  <p className="text-sm text-slate-600 leading-relaxed">{item.desc}</p>
+   383→                </Card>
+   384→              </motion.div>
+   385→            ))}
+   386→          </div>
+   387→        </div>
+   388→      </section>
+   389→
+   390→      {/* ─── Features ─── */}
+   391→      <section id="features" className="py-16">
+   392→        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+   393→          <div className="text-center mb-12">
+   394→            <h2 className="text-3xl font-bold text-slate-900 mb-3">Why Teams Choose FlowBot</h2>
+   395→            <p className="text-slate-600 max-w-lg mx-auto">Purpose-built for automation teams, not just another chatbot.</p>
+   396→          </div>
+   397→          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+   398→            {[
+   399→              { icon: <Database className="w-5 h-5" />, title: 'RAG-Powered Answers', desc: 'Answers come from YOUR docs only — no hallucinations. Every response includes a source reference customers can verify.' },
+   400→              { icon: <Workflow className="w-5 h-5" />, title: 'n8n & Make.com Native', desc: 'Trigger workflows directly from chat: create tickets, update CRMs, send notifications. Your bot does things, not just talks.' },
+   401→              { icon: <Lock className="w-5 h-5" />, title: 'Self-Hosted Option', desc: 'Keep all data on your own servers. Perfect for GDPR, HIPAA, and companies that need full control over customer conversations.' },
+   402→              { icon: <Headphones className="w-5 h-5" />, title: 'Smart Human Handoff', desc: 'When the bot can\'t help, it routes to the right human agent with full context — via Zendesk, Intercom, or Slack.' },
+   403→              { icon: <Zap className="w-5 h-5" />, title: '5-Minute Setup', desc: 'Upload docs, connect your LLM, embed the widget. No engineering team required. Get from zero to live in minutes.' },
+   404→              { icon: <TrendingUp className="w-5 h-5" />, title: 'Analytics Dashboard', desc: 'Track resolution rate, popular topics, response accuracy, and cost per conversation. Data-driven support optimization.' },
+   405→            ].map((feat, i) => (
+   406→              <motion.div
+   407→                key={feat.title}
+   408→                initial={{ opacity: 0, y: 15 }}
+   409→                animate={{ opacity: 1, y: 0 }}
+   410→                transition={{ duration: 0.4, delay: i * 0.1 }}
+   411→              >
+   412→                <Card className="p-5 h-full border-slate-200 hover:border-emerald-200 transition-colors">
+   413→                  <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
+   414→                    {feat.icon}
+   415→                  </div>
+   416→                  <h3 className="font-semibold text-slate-900 mb-1.5">{feat.title}</h3>
+   417→                  <p className="text-sm text-slate-600 leading-relaxed">{feat.desc}</p>
+   418→                </Card>
+   419→              </motion.div>
+   420→            ))}
+   421→          </div>
+   422→        </div>
+   423→      </section>
+   424→
+   425→      {/* ─── Live Demo ─── */}
+   426→      <section id="demo" className="py-16 bg-gradient-to-b from-slate-50 to-white">
+   427→        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+   428→          <div className="text-center mb-10">
+   429→            <h2 className="text-3xl font-bold text-slate-900 mb-3">Try It Live</h2>
+   430→            <p className="text-slate-600 max-w-lg mx-auto">This is a real, working demo. Ask questions and watch the n8n-style pipeline process your message in real time.</p>
+   431→          </div>
+   432→
+   433→          <div className="flex flex-col lg:flex-row gap-6 max-w-5xl mx-auto">
+   434→            {/* Workflow Visualization */}
+   435→            <div className="lg:w-[300px] shrink-0">
+   436→              <Card className="p-4 border-slate-200 shadow-sm">
+   437→                <div className="flex items-center gap-2 mb-3">
+   438→                  <Workflow className="w-4 h-4 text-emerald-500" />
+   439→                  <h3 className="text-sm font-semibold text-slate-700">Pipeline</h3>
+   440→                </div>
+   441→                <div className="space-y-2">
+   442→                  {workflowNodes.map((node, index) => {
+   443→                    const c = getNodeColor(node.color, node.active);
+   444→                    const isActive = activeNodeId === node.label;
+   445→                    return (
+   446→                      <div key={node.id}>
+   447→                        <motion.div
+   448→                          animate={{
+   449→                            scale: isActive ? 1.03 : 1,
+   450→                            boxShadow: isActive ? '0 0 16px rgba(16, 185, 129, 0.2)' : '0 0 0px rgba(0,0,0,0)',
+   451→                          }}
+   452→                          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+   453→                          className={`flex items-center gap-2.5 p-2.5 rounded-lg border-2 transition-all duration-300 ${c.bg} ${c.border} ${isActive ? `shadow-lg ${c.glow}` : ''}`}
+   454→                        >
+   455→                          <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors duration-300 ${node.active ? 'bg-emerald-100' : 'bg-slate-100'} ${c.text}`}>
+   456→                            {node.icon}
+   457→                          </div>
+   458→                          <div className="min-w-0">
+   459→                            <div className={`text-xs font-medium transition-colors duration-300 ${c.text}`}>
+   460→                              {node.label}
+   461→                              {isActive && <Zap className="w-3 h-3 text-amber-500 inline ml-1" />}
+   462→                            </div>
+   463→                            <div className="text-[10px] text-slate-400 truncate">{node.description}</div>
+   464→                          </div>
+   465→                          {node.active && (
+   466→                            <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+   467→                          )}
+   468→                        </motion.div>
+   469→                        {index < workflowNodes.length - 1 && (
+   470→                          <div className="flex justify-center py-0.5">
+   471→                            <ArrowRight className="w-3 h-3 text-slate-300 rotate-90" />
+   472→                          </div>
+   473→                        )}
+   474→                      </div>
+   475→                    );
+   476→                  })}
+   477→                </div>
+   478→                <div className="mt-3 pt-2 border-t border-slate-100 text-[10px] text-slate-400 space-y-0.5">
+   479→                  <div className="flex items-center gap-1.5"><BookOpen className="w-3 h-3" /> Knowledge base: 8 topics</div>
+   480→                  <div className="flex items-center gap-1.5"><Cpu className="w-3 h-3" /> AI-powered responses</div>
+   481→                </div>
+   482→              </Card>
+   483→
+   484→              {/* Quick Actions */}
+   485→              <Card className="p-4 border-slate-200 shadow-sm mt-3">
+   486→                <div className="flex items-center gap-2 mb-2.5">
+   487→                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+   488→                  <h3 className="text-xs font-semibold text-slate-700">Try These</h3>
+   489→                </div>
+   490→                <div className="grid grid-cols-2 gap-1.5">
+   491→                  {quickActions.map((action) => (
+   492→                    <Button
+   493→                      key={action.label}
+   494→                      variant="outline"
+   495→                      size="sm"
+   496→                      className="text-[11px] h-8 justify-start gap-1 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition-colors"
+   497→                      onClick={() => sendMessage(action.message)}
+   498→                      disabled={isLoading}
+   499→                    >
+   500→                      <action.icon className="w-3 h-3 shrink-0" />
+   501→                      {action.label}
+   502→                    </Button>
+   503→                  ))}
+   504→                </div>
+   505→              </Card>
+   506→            </div>
+   507→
+   508→            {/* Chat Interface */}
+   509→            <div className="flex-1 flex flex-col min-h-0">
+   510→              <Card className="flex-1 flex flex-col border-slate-200 shadow-sm overflow-hidden min-h-[420px]">
+   511→                {/* Chat header */}
+   512→                <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-white">
+   513→                  <div className="flex items-center gap-2.5">
+   514→                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+   515→                      <Bot className="w-3.5 h-3.5 text-white" />
+   516→                    </div>
+   517→                    <div>
+   518→                      <div className="text-sm font-semibold text-slate-800">CloudBot Support</div>
+   519→                      <div className="text-[10px] text-emerald-600 flex items-center gap-1">
+   520→                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+   521→                        Online
+   522→                      </div>
+   523→                    </div>
+   524→                  </div>
+   525→                  <Button variant="ghost" size="sm" onClick={resetChat} className="text-slate-400 hover:text-slate-600 h-7 w-7 p-0">
+   526→                    <RotateCcw className="w-3.5 h-3.5" />
+   527→                  </Button>
+   528→                </div>
+   529→
+   530→                {/* Messages */}
+   531→                <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+   532→                  {messages.length === 0 ? (
+   533→                    <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center px-4">
+   534→                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-500/20">
+   535→                        <Bot className="w-6 h-6 text-white" />
+   536→                      </div>
+   537→                      <h3 className="text-base font-bold text-slate-800 mb-1">Ask CloudBot Anything</h3>
+   538→                      <p className="text-xs text-slate-500 max-w-xs mb-4">
+   539→                        This is a real demo for CloudFlow (a fictional SaaS). Try the quick actions or type your own question!
+   540→                      </p>
+   541→                      <div className="flex flex-wrap gap-1.5 justify-center">
+   542→                        {quickActions.map((action) => (
+   543→                          <Button
+   544→                            key={action.label}
+   545→                            variant="outline"
+   546→                            size="sm"
+   547→                            className="text-[11px] gap-1 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700"
+   548→                            onClick={() => sendMessage(action.message)}
+   549→                          >
+   550→                            <action.icon className="w-3 h-3" />
+   551→                            {action.label}
+   552→                          </Button>
+   553→                        ))}
+   554→                      </div>
+   555→                    </div>
+   556→                  ) : (
+   557→                    <div className="space-y-3 pb-2">
+   558→                      {messages.map((msg) => (
+   559→                        <motion.div
+   560→                          key={msg.id}
+   561→                          initial={{ opacity: 0, y: 8 }}
+   562→                          animate={{ opacity: 1, y: 0 }}
+   563→                          transition={{ duration: 0.25 }}
+   564→                          className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+   565→                        >
+   566→                          {msg.role === 'bot' && (
+   567→                            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shrink-0 shadow-sm">
+   568→                              <Bot className="w-3.5 h-3.5 text-white" />
+   569→                            </div>
+   570→                          )}
+   571→                          <div className={`max-w-[80%] ${msg.role === 'user' ? 'order-first' : ''}`}>
+   572→                            <div
+   573→                              className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
+   574→                                msg.role === 'user'
+   575→                                  ? 'bg-emerald-600 text-white rounded-br-md'
+   576→                                  : 'bg-slate-100 text-slate-800 rounded-bl-md'
+   577→                              }`}
+   578→                            >
+   579→                              {msg.content}
+   580→                            </div>
+   581→                            {msg.role === 'bot' && msg.knowledgeBaseHit !== undefined && (
+   582→                              <div className="flex items-center gap-1.5 mt-1 px-1">
+   583→                                {msg.knowledgeBaseHit ? (
+   584→                                  <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 gap-0.5 px-1.5 py-0">
+   585→                                    <Database className="w-2 h-2" />
+   586→                                    KB: {msg.topic || 'matched'}
+   587→                                  </Badge>
+   588→                                ) : (
+   589→                                  <Badge variant="outline" className="text-[9px] border-amber-200 text-amber-600 bg-amber-50 gap-0.5 px-1.5 py-0">
+   590→                                    <AlertCircle className="w-2 h-2" />
+   591→                                    No KB match
+   592→                                  </Badge>
+   593→                                )}
+   594→                                {msg.nodesTriggered && (
+   595→                                  <Badge variant="outline" className="text-[9px] border-slate-200 text-slate-500 bg-slate-50 gap-0.5 px-1.5 py-0">
+   596→                                    <Workflow className="w-2 h-2" />
+   597→                                    {msg.nodesTriggered.length} nodes
+   598→                                  </Badge>
+   599→                                )}
+   600→                              </div>
+   601→                            )}
+   602→                          </div>
+   603→                          {msg.role === 'user' && (
+   604→                            <div className="w-7 h-7 rounded-lg bg-slate-200 flex items-center justify-center shrink-0">
+   605→                              <User className="w-3.5 h-3.5 text-slate-600" />
+   606→                            </div>
+   607→                          )}
+   608→                        </motion.div>
+   609→                      ))}
+   610→                      {isLoading && (
+   611→                        <div className="flex gap-2.5">
+   612→                          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shrink-0">
+   613→                            <Bot className="w-3.5 h-3.5 text-white" />
+   614→                          </div>
+   615→                          <div className="bg-slate-100 rounded-2xl rounded-bl-md px-3.5 py-2.5">
+   616→                            <div className="flex items-center gap-1">
+   617→                              <motion.div className="w-1.5 h-1.5 bg-emerald-400 rounded-full" animate={{ y: [0, -5, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0 }} />
+   618→                              <motion.div className="w-1.5 h-1.5 bg-emerald-400 rounded-full" animate={{ y: [0, -5, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.15 }} />
+   619→                              <motion.div className="w-1.5 h-1.5 bg-emerald-400 rounded-full" animate={{ y: [0, -5, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.3 }} />
+   620→                            </div>
+   621→                          </div>
+   622→                        </div>
+   623→                      )}
+   624→                    </div>
+   625→                  )}
+   626→                </ScrollArea>
+   627→
+   628→                {/* Input */}
+   629→                <div className="border-t border-slate-100 p-3 bg-white">
+   630→                  <form
+   631→                    onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
+   632→                    className="flex items-center gap-2"
+   633→                  >
+   634→                    <Input
+   635→                      ref={inputRef}
+   636→                      value={input}
+   637→                      onChange={(e) => setInput(e.target.value)}
+   638→                      placeholder="Ask CloudBot anything..."
+   639→                      disabled={isLoading}
+   640→                      className="flex-1 border-slate-200 focus:border-emerald-400 focus:ring-emerald-400/20 text-sm h-9"
+   641→                    />
+   642→                    <Button
+   643→                      type="submit"
+   644→                      size="sm"
+   645→                      disabled={isLoading || !input.trim()}
+   646→                      className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm h-9 w-9 p-0"
+   647→                    >
+   648→                      <Send className="w-4 h-4" />
+   649→                    </Button>
+   650→                  </form>
+   651→                </div>
+   652→              </Card>
+   653→            </div>
+   654→          </div>
+   655→        </div>
+   656→      </section>
+   657→
+   658→      {/* ─── Pricing ─── */}
+   659→      <section id="pricing" className="py-16">
+   660→        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+   661→          <div className="text-center mb-12">
+   662→            <h2 className="text-3xl font-bold text-slate-900 mb-3">Simple, Transparent Pricing</h2>
+   663→            <p className="text-slate-600 max-w-lg mx-auto">Start free. Scale as you grow. No hidden fees, no per-seat charges.</p>
+   664→          </div>
+   665→          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+   666→            {[
+   667→              {
+   668→                name: 'Starter',
+   669→                price: 'Free',
+   670→                period: '',
+   671→                desc: 'For trying FlowBot on a side project',
+   672→                features: ['500 conversations/mo', '1 knowledge base', '1 chat widget', 'Community support', 'Cloud-hosted only'],
+   673→                cta: 'Join Waitlist',
+   674→                highlight: false,
+   675→              },
+   676→              {
+   677→                name: 'Pro',
+   678→                price: '$49',
+   679→                period: '/mo',
+   680→                desc: 'For growing teams that need real support automation',
+   681→                features: ['5,000 conversations/mo', '5 knowledge bases', '3 chat widgets', 'Priority email support', 'Self-hosted option', 'n8n & Make.com integration', 'Custom branding', 'Analytics dashboard'],
+   682→                cta: 'Get Early Access',
+   683→                highlight: true,
+   684→              },
+   685→              {
+   686→                name: 'Enterprise',
+   687→                price: '$149',
+   688→                period: '/mo',
+   689→                desc: 'For companies with serious support volume',
+   690→                features: ['Unlimited conversations', 'Unlimited knowledge bases', 'Unlimited widgets', '24/7 phone support', 'Self-hosted included', 'SSO & RBAC', 'White-label', 'Dedicated account manager', 'SLA guarantee'],
+   691→                cta: 'Contact Sales',
+   692→                highlight: false,
+   693→              },
+   694→            ].map((plan, i) => (
+   695→              <motion.div
+   696→                key={plan.name}
+   697→                initial={{ opacity: 0, y: 20 }}
+   698→                animate={{ opacity: 1, y: 0 }}
+   699→                transition={{ duration: 0.4, delay: i * 0.1 }}
+   700→              >
+   701→                <Card className={`p-6 h-full flex flex-col ${plan.highlight ? 'border-emerald-400 border-2 shadow-lg shadow-emerald-500/10 relative' : 'border-slate-200'}`}>
+   702→                  {plan.highlight && (
+   703→                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+   704→                      <Badge className="bg-emerald-600 text-white px-3 py-0.5 text-xs">
+   705→                        <Star className="w-3 h-3 mr-1" />
+   706→                        Most Popular
+   707→                      </Badge>
+   708→                    </div>
+   709→                  )}
+   710→                  <div className="mb-4">
+   711→                    <h3 className="text-lg font-bold text-slate-900">{plan.name}</h3>
+   712→                    <div className="mt-2 flex items-baseline gap-1">
+   713→                      <span className="text-3xl font-extrabold text-slate-900">{plan.price}</span>
+   714→                      {plan.period && <span className="text-slate-500 text-sm">{plan.period}</span>}
+   715→                    </div>
+   716→                    <p className="text-sm text-slate-500 mt-1">{plan.desc}</p>
+   717→                  </div>
+   718→                  <ul className="space-y-2 mb-6 flex-1">
+   719→                    {plan.features.map((feat) => (
+   720→                      <li key={feat} className="flex items-start gap-2 text-sm text-slate-600">
+   721→                        <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+   722→                        {feat}
+   723→                      </li>
+   724→                    ))}
+   725→                  </ul>
+   726→                  <Button
+   727→                    className={`w-full ${plan.highlight ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm' : 'bg-slate-900 hover:bg-slate-800 text-white'}`}
+   728→                    onClick={() => document.getElementById('waitlist')?.scrollIntoView({ behavior: 'smooth' })}
+   729→                  >
+   730→                    {plan.cta}
+   731→                  </Button>
+   732→                </Card>
+   733→              </motion.div>
+   734→            ))}
+   735→          </div>
+   736→          <p className="text-center text-sm text-slate-500 mt-6">All plans include a 14-day free trial. No credit card required.</p>
+   737→        </div>
+   738→      </section>
+   739→
+   740→      {/* ─── FAQ ─── */}
+   741→      <section id="faq" className="py-16 bg-slate-50/50">
+   742→        <div className="max-w-3xl mx-auto px-4 sm:px-6">
+   743→          <div className="text-center mb-10">
+   744→            <h2 className="text-3xl font-bold text-slate-900 mb-3">Frequently Asked Questions</h2>
+   745→          </div>
+   746→          <div className="space-y-3">
+   747→            {faqs.map((faq, i) => (
+   748→              <Card key={i} className="border-slate-200 overflow-hidden">
+   749→                <button
+   750→                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+   751→                  className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-50/50 transition-colors"
+   752→                >
+   753→                  <span className="font-medium text-slate-900 text-sm pr-4">{faq.q}</span>
+   754→                  <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${openFaq === i ? 'rotate-180' : ''}`} />
+   755→                </button>
+   756→                <AnimatePresence>
+   757→                  {openFaq === i && (
+   758→                    <motion.div
+   759→                      initial={{ height: 0, opacity: 0 }}
+   760→                      animate={{ height: 'auto', opacity: 1 }}
+   761→                      exit={{ height: 0, opacity: 0 }}
+   762→                      transition={{ duration: 0.2 }}
+   763→                      className="overflow-hidden"
+   764→                    >
+   765→                      <div className="px-4 pb-4 text-sm text-slate-600 leading-relaxed">
+   766→                        {faq.a}
+   767→                      </div>
+   768→                    </motion.div>
+   769→                  )}
+   770→                </AnimatePresence>
+   771→              </Card>
+   772→            ))}
+   773→          </div>
+   774→        </div>
+   775→      </section>
+   776→
+   777→      {/* ─── Waitlist CTA ─── */}
+   778→      <section id="waitlist" className="py-20">
+   779→        <div className="max-w-2xl mx-auto px-4 sm:px-6 text-center">
+   780→          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+   781→            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-500/20">
+   782→              <Zap className="w-7 h-7 text-white" />
+   783→            </div>
+   784→            <h2 className="text-3xl font-bold text-slate-900 mb-3">Get Early Access</h2>
+   785→            <p className="text-slate-600 mb-8 max-w-md mx-auto">
+   786→              Join the waitlist and be among the first to deploy an AI support bot that actually resolves tickets. Early adopters get 3 months free on any paid plan.
+   787→            </p>
+   788→
+   789→            {wlStatus === 'success' ? (
+   790→              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-emerald-50 border border-emerald-200 rounded-xl p-6">
+   791→                <Check className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
+   792→                <h3 className="font-bold text-emerald-800 text-lg mb-1">You&apos;re on the list!</h3>
+   793→                <p className="text-emerald-700 text-sm">{wlMessage}</p>
+   794→                <p className="text-emerald-600 text-xs mt-2">We&apos;ll reach out when your spot is ready.</p>
+   795→              </motion.div>
+   796→            ) : (
+   797→              <form onSubmit={handleWaitlist} className="max-w-md mx-auto">
+   798→                <div className="flex flex-col sm:flex-row gap-2 mb-2">
+   799→                  <Input
+   800→                    type="email"
+   801→                    placeholder="you@company.com"
+   802→                    value={wlEmail}
+   803→                    onChange={(e) => setWlEmail(e.target.value)}
+   804→                    required
+   805→                    className="flex-1 border-slate-200 focus:border-emerald-400 focus:ring-emerald-400/20"
+   806→                  />
+   807→                  <Input
+   808→                    type="text"
+   809→                    placeholder="Company (optional)"
+   810→                    value={wlCompany}
+   811→                    onChange={(e) => setWlCompany(e.target.value)}
+   812→                    className="flex-1 border-slate-200 focus:border-emerald-400 focus:ring-emerald-400/20"
+   813→                  />
+   814→                </div>
+   815→                <Button
+   816→                  type="submit"
+   817→                  disabled={wlStatus === 'loading' || !wlEmail.trim()}
+   818→                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-500/20 gap-2"
+   819→                  size="lg"
+   820→                >
+   821→                  {wlStatus === 'loading' ? 'Joining...' : 'Join the Waitlist'}
+   822→                  <ArrowRight className="w-4 h-4" />
+   823→                </Button>
+   824→                {wlStatus === 'error' && (
+   825→                  <p className="text-red-500 text-sm mt-2">{wlMessage}</p>
+   826→                )}
+   827→                <p className="text-xs text-slate-400 mt-3">No spam. Unsubscribe anytime. Early adopters get 3 months free.</p>
+   828→              </form>
+   829→            )}
+   830→          </motion.div>
+   831→        </div>
+   832→      </section>
+   833→
+   834→      {/* ─── Footer ─── */}
+   835→      <footer className="border-t border-slate-100 bg-white mt-auto">
+   836→        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-slate-500">
+   837→          <div className="flex items-center gap-2">
+   838→            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+   839→              <Workflow className="w-3 h-3 text-white" />
+   840→            </div>
+   841→            <span className="font-semibold text-slate-700">FlowBot</span>
+   842→          </div>
+   843→          <p>AI Support Bot for Automation Teams</p>
+   844→          <p>Built with Next.js + AI SDK + Knowledge Base</p>
+   845→        </div>
+   846→      </footer>
+   847→    </div>
+   848→  );
+   849→}
+   850→
